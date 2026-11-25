@@ -3903,6 +3903,7 @@ var NET_ICE = { iceServers: [
   { urls: "stun:stun.cloudflare.com:3478" },
   { urls: "stun:stun.l.google.com:19302" }
 ] };
+var NET_VERSION = "V1125b";
 
 function loadPeerJS(ok, fail){
   if (window.Peer) { ok(); return; }
@@ -3981,6 +3982,7 @@ function showLobby(){
         '<div style="font-size:12px;color:#a9855c;margin-top:6px">等待对手加入…</div>' +
       '</div>' +
       '<button class="btn ghost" id="lobbyBack" style="width:100%;margin-top:12px">← 返回</button>' +
+      '<div style="font-size:11px;color:#c7a97f;margin-top:10px;text-align:center">当前版本 ' + NET_VERSION + '</div>' +
     '</div>';
   document.body.appendChild(ov);
   document.getElementById("lobbyBack").addEventListener("click", function(){
@@ -4133,7 +4135,7 @@ function wireConn(conn){
   conn.on("open", function(){
     NET.active = true;
     sessReset(); // 新连线：累计比分清零
-    conn.send({ t: "hello", name: NET.myName });
+    conn.send({ t: "hello", name: NET.myName, v: NET_VERSION });
   });
   conn.on("data", netOnMsg);
   conn.on("close", function(){ netOnDisconnect(); });
@@ -4153,13 +4155,19 @@ function netOnMsg(m){
   if (!m || typeof m !== "object") return;
   if (m.t === "hello"){
     if (m.name) NET.foeName = String(m.name).slice(0, 8);
+    NET.foeVer = m.v ? String(m.v) : "旧版本";
     CFG.playerName = NET.myName;
     CFG.opponentName = NET.foeName;
     if (!NET.prepShown){
       NET.prepShown = true;
       var lb = document.getElementById("lobbyOv");
       if (lb) lb.remove();
-      showPanel("对战已连接", "对手：" + NET.foeName + "\n\n双方各自选好卡组，都就绪后自动开局。", "选卡组", function(){
+      var verSame = (NET.foeVer === NET_VERSION);
+      var verLine = "\n\n版本：我方 " + NET_VERSION + " / 对方 " + NET.foeVer;
+      var body = "对手：" + NET.foeName + verLine +
+        (verSame ? "\n\n双方各自选好卡组，都就绪后自动开局。"
+                 : "\n\n【版本不一致！】请让对方在微信里点右上角「···」→「刷新」，或彻底退出微信重新打开链接，刷新后再重连房。");
+      showPanel(verSame ? "对战已连接" : "对战已连接（版本不一致）", body, "选卡组", function(){
         closePanel();
         showDeckPicker();
       });
