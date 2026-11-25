@@ -3903,7 +3903,7 @@ var NET_ICE = { iceServers: [
   { urls: "stun:stun.cloudflare.com:3478" },
   { urls: "stun:stun.l.google.com:19302" }
 ] };
-var NET_VERSION = "V1125b";
+var NET_VERSION = "V1125c";
 
 function loadPeerJS(ok, fail){
   if (window.Peer) { ok(); return; }
@@ -4145,6 +4145,7 @@ function wireConn(conn){
 function netOnDisconnect(){
   if (!NET.active) return;
   NET.active = false;
+  clearTimeout(NET.deckAckTimer);
   showPanel("连接已断开", "对方已离开对战房间。", "重新开始", function(){
     location.reload();
   });
@@ -4182,6 +4183,7 @@ function netOnMsg(m){
 function netOnHostMsg(m){
   if (m.t === "deck"){
     NET.guestDeckIds = (m.ids || []).slice();
+    NET.send({ t: "deckAck" });
     netTryStart();
     return;
   }
@@ -4255,6 +4257,11 @@ function netOnHostMsg(m){
 
 /* ---------- 挑战者：应用房主的权威状态 ---------- */
 function netOnGuestMsg(m){
+  if (m.t === "deckAck"){
+    NET.deckAcked = true;
+    clearTimeout(NET.deckAckTimer);
+    return;
+  }
   if (m.t === "init"){
     if (!NET.started){
       NET.started = true;
@@ -4439,23 +4446,42 @@ function netOnDeckChosen(ids){
     netTryStart();
   } else {
     NET.guestDeckIds = ids.slice();
+    NET.deckAcked = false;
     NET.send({ t: "deck", ids: shuffle(ids).slice() });
     showPanel("已就绪", "卡组已发给房主。\n\n等待房主开局…", "请稍候", function(){});
+    netArmDeckAckWatchdog();
   }
 }
 
 function netTryStart(){
   if (!NET.isHost || NET.started) return;
   if (!NET.hostDeckIds || !NET.guestDeckIds){
-    showPanel("已就绪", "你的卡组已选好。\n\n等待对手选卡组…", "请稍候", function(){});
+    showPanel("已就绪", "你的卡组已选好。\n\n等待对手选卡组…\n\n（若长时间无进展，说明对方网络不稳，让对方重选卡组或双方刷新后重连）", "请稍候", function(){});
     return;
   }
   netStartPvpGame();
 }
 
+/* 挑战者：卡组送达确认。7 秒没收到房主回执 → 弹重发面板 */
+function netArmDeckAckWatchdog(){
+  clearTimeout(NET.deckAckTimer);
+  NET.deckAckTimer = setTimeout(function(){
+    if (!NET.active || NET.deckAcked || NET.started) return;
+    showPanel("网络不稳定", "卡组可能没有送达房主（对方一直没开局）。\n\n请点「重发卡组」重试；若重发后仍无进展，双方点右上角「···」→「刷新」后重新建房连接。", "重发卡组", function(){
+      closePanel();
+      if (!NET.active || NET.started) return;
+      NET.send({ t: "deck", ids: shuffle(NET.guestDeckIds).slice() });
+      showPanel("已就绪", "卡组已重发给房主。\n\n等待房主开局…", "请稍候", function(){});
+      netArmDeckAckWatchdog();
+    });
+  }, 7000);
+}
+
 /* 房主开局：双方牌序都确定性一致（挑战者自己洗牌发来顺序，房主不重洗） */
 function netStartPvpGame(){
   NET.started = true;
+  NET.deckAcked = true;
+  clearTimeout(NET.deckAckTimer);
   NET.reShown = null;
   NET.goShown = null;
   closePanel();
@@ -4478,6 +4504,8 @@ function netRematch(){
   NET.reShown = null;
   NET.goShown = null;
   NET.myPickPending = null;
+  NET.deckAcked = false;
+  clearTimeout(NET.deckAckTimer);
   showDeckPicker();
 }
 
