@@ -4017,37 +4017,40 @@ function showLobby(){
   }
 }
 function netShareToWechat(shareLink, code){
-  var title = "胖橘和小狸 · 双人对战";
-  var desc = "房间码 " + code + "，点开直接跟我对战！";
-  var img = location.origin + location.pathname.replace(/[^/]*$/, "") + "icons/icon-512.png";
-  function doBridge(){
-    try{
-      if (window.WeixinJSBridge && window.WeixinJSBridge.invoke){
-        window.WeixinJSBridge.invoke("shareAppMessage", {
-          title: title, desc: desc, link: shareLink, imgUrl: img, type: "", dataUrl: ""
-        }, function(){});
-        return true;
-      }
-    }catch(e){}
-    return false;
-  }
-  function fallback(msg){
-    netCopyText(shareLink, function(ok){
-      lobbyStatus(ok ? msg : "复制失败，请手动把房间码发给对方");
-    });
-  }
-  if (doBridge()){ lobbyStatus("已唤起微信转发，选一个好友发送即可"); return; }
-  var settled = false;
-  document.addEventListener("WeixinJSBridgeReady", function(){
-    if (settled) return; settled = true;
-    if (!doBridge()) fallback("转发暂不可用，链接已复制，去微信粘贴给对方");
-  }, false);
-  setTimeout(function(){
-    if (settled) return; settled = true;
-    fallback(/MicroMessenger/i.test(navigator.userAgent)
-      ? "转发暂不可用，可点右上角「…」转发，或复制链接发给对方"
-      : "当前不在微信内，链接已复制，粘贴发给对方即可");
-  }, 800);
+  // 微信已封锁普通网页的 JS 主动转发接口（WeixinJSBridge.invoke shareAppMessage 静默失效），
+  // 唯一官方途径：用户点右上角「···」→「转发给朋友」。转发卡片标题自动取页面 title，
+  // 所以这里把房间码写进 title，并复制链接 + 弹步骤引导浮层。
+  var inWx = /MicroMessenger/i.test(navigator.userAgent);
+  try{ document.title = "胖橘和小狸·双人对战 房间码" + code; }catch(e){}
+  netCopyText(shareLink, function(){});
+  netShowShareGuide(code, inWx);
+}
+function netShowShareGuide(code, inWx){
+  var old = document.getElementById("shareGuideOv");
+  if (old && old.parentNode) old.parentNode.removeChild(old);
+  var ov = document.createElement("div");
+  ov.id = "shareGuideOv";
+  ov.style.cssText = "position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px";
+  var steps = inWx
+    ? '<div style="margin-bottom:8px">① 点微信<b>右上角「···」</b>菜单</div>' +
+      '<div style="margin-bottom:8px">② 选<b>「转发给朋友」</b>，选好友发送<br>' +
+      '<span style="font-size:12px;color:#8a7255">转发卡片自动带上房间码，对方点开直接进房</span></div>'
+    : '<div style="margin-bottom:8px">当前不在微信内，对战链接<b>已复制</b>到剪贴板。</div>' +
+      '<div style="margin-bottom:8px">打开微信粘贴发给对方，对方点开直接进房。</div>';
+  ov.innerHTML =
+    '<div style="background:#fff8ec;border-radius:16px;max-width:340px;width:100%;padding:22px 20px;font-size:15px;line-height:1.6;color:#4a3520;box-shadow:0 8px 30px rgba(0,0,0,.35)">' +
+      '<div style="font-weight:bold;font-size:17px;margin-bottom:12px">' + (inWx ? "转发给好友（两步）" : "发给好友对战") + '</div>' +
+      steps +
+      '<div style="margin:10px 0 14px;padding:9px 12px;background:#fff;border-radius:10px;font-size:13px;color:#8a7255">备用：把房间码 <b style="font-size:16px;letter-spacing:3px;color:#4a3520">' + code + '</b> 直接发对方，手动输入进房</div>' +
+      '<button id="shareGuideOk" style="width:100%;padding:11px;border:0;border-radius:10px;background:#e8843c;color:#fff;font-size:15px;font-weight:bold">知道了</button>' +
+    '</div>';
+  document.body.appendChild(ov);
+  ov.addEventListener("click", function(e){
+    if (e.target === ov || e.target.id === "shareGuideOk"){
+      var o = document.getElementById("shareGuideOv");
+      if (o && o.parentNode) o.parentNode.removeChild(o);
+    }
+  });
 }
 function netCopyText(text, cb){
   try{
