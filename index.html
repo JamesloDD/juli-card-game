@@ -3969,15 +3969,15 @@ function showLobby(){
       '<h2 style="margin:0 0 4px">双人对战大厅</h2>' +
       '<div style="font-size:13px;color:#8a6642;margin-bottom:14px">创建房间把房间码发给朋友，或输入对方的房间码加入</div>' +
       '<button class="btn" id="lobbyCreate" style="width:100%;padding:13px;margin-bottom:10px">创建房间（当房主）</button>' +
-      '<div style="display:flex;gap:8px">' +
-        '<input id="lobbyCode" maxlength="5" placeholder="房间码" style="flex:1;padding:10px;border:1px solid #d9b98a;border-radius:10px;font-size:16px;letter-spacing:4px;text-transform:uppercase;text-align:center">' +
-        '<button class="btn ghost" id="lobbyJoin" style="flex:0 0 96px">加入房间</button>' +
+      '<div style="display:flex;gap:8px;align-items:stretch">' +
+        '<input id="lobbyCode" maxlength="5" placeholder="房间码" style="flex:1 1 0%;min-width:0;padding:10px 6px;border:1px solid #d9b98a;border-radius:10px;font-size:16px;letter-spacing:2px;text-transform:uppercase;text-align:center;box-sizing:border-box">' +
+        '<button class="btn ghost" id="lobbyJoin" style="flex:0 0 auto;padding:10px 14px;font-size:14px;white-space:nowrap;box-sizing:border-box">加入房间</button>' +
       '</div>' +
       '<div id="lobbyStatus" style="font-size:12px;color:#a9855c;margin-top:12px;min-height:16px;text-align:center"></div>' +
       '<div id="lobbyCodeBox" style="display:none;text-align:center;margin-top:6px">' +
         '<div style="font-size:12px;color:#8a6642;margin-bottom:4px">你的房间码（发给对方）</div>' +
         '<div id="lobbyCodeTxt" style="font-size:30px;font-weight:900;letter-spacing:8px;color:#5a2f14"></div>' +
-        '<button class="btn" id="lobbyShare" style="width:100%;margin-top:10px">复制对战链接（微信发给对方）</button>' +
+        '<button class="btn" id="lobbyShare" style="width:100%;margin-top:10px">转发给微信好友</button>' +
         '<div style="font-size:12px;color:#a9855c;margin-top:6px">等待对手加入…</div>' +
       '</div>' +
       '<button class="btn ghost" id="lobbyBack" style="width:100%;margin-top:12px">← 返回</button>' +
@@ -3995,12 +3995,10 @@ function showLobby(){
   });
   document.getElementById("lobbyShare").addEventListener("click", function(){
     var code = (document.getElementById("lobbyCodeTxt").textContent || "").trim();
-    if (code.length !== 5){ lobbyStatus("先创建房间，再复制链接"); return; }
+    if (code.length !== 5){ lobbyStatus("先创建房间，再转发给好友"); return; }
     var base = location.href.split(/[?#]/)[0] + (location.search || "").replace(/[?&]room=[A-Z0-9]{5}/ig, "").replace(/^&/, "?");
     var sep = base.indexOf("?") >= 0 ? "&" : "?";
-    netCopyText(base + sep + "room=" + code, function(ok){
-      lobbyStatus(ok ? "对战链接已复制！去微信粘贴发送，对方点开直接加入" : "复制失败，请手动把房间码发给对方");
-    });
+    netShareToWechat(base + sep + "room=" + code, code);
   });
   document.getElementById("lobbyJoin").addEventListener("click", function(){
     var code = document.getElementById("lobbyCode").value.trim().toUpperCase();
@@ -4017,6 +4015,39 @@ function showLobby(){
       if (btn) btn.click();
     }, 300);
   }
+}
+function netShareToWechat(shareLink, code){
+  var title = "胖橘和小狸 · 双人对战";
+  var desc = "房间码 " + code + "，点开直接跟我对战！";
+  var img = location.origin + location.pathname.replace(/[^/]*$/, "") + "icons/icon-512.png";
+  function doBridge(){
+    try{
+      if (window.WeixinJSBridge && window.WeixinJSBridge.invoke){
+        window.WeixinJSBridge.invoke("shareAppMessage", {
+          title: title, desc: desc, link: shareLink, imgUrl: img, type: "", dataUrl: ""
+        }, function(){});
+        return true;
+      }
+    }catch(e){}
+    return false;
+  }
+  function fallback(msg){
+    netCopyText(shareLink, function(ok){
+      lobbyStatus(ok ? msg : "复制失败，请手动把房间码发给对方");
+    });
+  }
+  if (doBridge()){ lobbyStatus("已唤起微信转发，选一个好友发送即可"); return; }
+  var settled = false;
+  document.addEventListener("WeixinJSBridgeReady", function(){
+    if (settled) return; settled = true;
+    if (!doBridge()) fallback("转发暂不可用，链接已复制，去微信粘贴给对方");
+  }, false);
+  setTimeout(function(){
+    if (settled) return; settled = true;
+    fallback(/MicroMessenger/i.test(navigator.userAgent)
+      ? "转发暂不可用，可点右上角「…」转发，或复制链接发给对方"
+      : "当前不在微信内，链接已复制，粘贴发给对方即可");
+  }, 800);
 }
 function netCopyText(text, cb){
   try{
