@@ -3903,7 +3903,7 @@ var NET_ICE = { iceServers: [
   { urls: "stun:stun.cloudflare.com:3478" },
   { urls: "stun:stun.l.google.com:19302" }
 ] };
-var NET_VERSION = "V1125c";
+var NET_VERSION = "V1125d";
 
 function loadPeerJS(ok, fail){
   if (window.Peer) { ok(); return; }
@@ -4455,8 +4455,18 @@ function netOnDeckChosen(ids){
 
 function netTryStart(){
   if (!NET.isHost || NET.started) return;
-  if (!NET.hostDeckIds || !NET.guestDeckIds){
-    showPanel("已就绪", "你的卡组已选好。\n\n等待对手选卡组…\n\n（若长时间无进展，说明对方网络不稳，让对方重选卡组或双方刷新后重连）", "请稍候", function(){});
+  if (!NET.hostDeckIds){
+    // 【关键修复】挑战者先选完卡组、房主还没选时，绝不能弹「请稍候」遮罩：
+    // 那个全屏面板会盖住房主自己的「选卡组」按钮，房主被锁死 → 双方永远互等。
+    // 这里静默返回，房主照常点「选卡组」，选完会再次进入本函数自动开局。
+    return;
+  }
+  if (!NET.guestDeckIds){
+    // 给等待面板留一个出口：万一对手消息丢了，可重开卡组界面自救，不会死等
+    showPanel("已就绪", "你的卡组已选好。\n\n等待对手选卡组…\n\n（对方点「用这套应战」后自动开局；若长时间没反应，点下方按钮重开选卡界面）", "重新选卡组", function(){
+      closePanel();
+      showDeckPicker();
+    });
     return;
   }
   netStartPvpGame();
